@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRONTLINE — territory prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0d12;
+    --panel:#12171f;
+    --panel-2:#1a212b;
+    --border:#26303c;
+    --text:#dde4ec;
+    --text-dim:#8493a3;
+    --accent:#29b6d8;
+    --accent-dim:#1c6f85;
+    --danger:#c1443c;
+    --good:#5fae6f;
+    --water:#0e2233;
+    --land:#5c6b4d;
+    --mountain:#463f37;
+    --font-head:'Space Grotesk', system-ui, sans-serif;
+    --font-body:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0a0d12; --panel:#12171f; --panel-2:#1a212b; --border:#26303c;
+      --text:#dde4ec; --text-dim:#8493a3;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0a0d12; --panel:#12171f; --panel-2:#1a212b; --border:#26303c;
+    --text:#dde4ec; --text-dim:#8493a3;
+  }
+  :root[data-theme="light"]{
+    --bg:#e9edf1; --panel:#f4f6f8; --panel-2:#e3e8ec; --border:#c7d0d8;
+    --text:#1b232c; --text-dim:#54626f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    height:100vh;
+    overflow:hidden;
+  }
+
+
+  .country-modal{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(5,8,12,.86);backdrop-filter:blur(10px);padding:20px;}
+  .country-card{width:min(430px,92vw);background:rgba(18,23,31,.97);border:1px solid var(--border);box-shadow:0 24px 80px rgba(0,0,0,.55);padding:24px;border-radius:14px;}
+  .country-card h2{margin:5px 0 8px;font-family:var(--font-head);font-size:28px;}
+  .country-card p{color:var(--text-dim);font-size:13px;line-height:1.5;margin:0 0 20px;}
+  .country-kicker{font:700 10px var(--font-mono);letter-spacing:.14em;color:var(--accent);}
+  .country-card label{display:block;font-size:11px;color:var(--text-dim);margin:12px 0;}
+  .country-card input,.country-card select{width:100%;margin-top:6px;padding:11px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);outline:none;}
+  .country-card .primary{width:100%;margin-top:10px;}
+
+  /* ---------- fullscreen map layer ---------- */
+  .map-frame{
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--bg);
+    z-index:0;
+    overflow:hidden;
+    touch-action:none;
+  }
+  .map-stage{
+    position:relative;
+    width:min(100vw, 100vh);
+    height:min(100vw, 100vh);
+    max-width:1000px; max-height:1000px;
+    flex:0 0 auto;
+    transform-origin:center center;
+    will-change:transform;
+    user-select:none;
+  }
+  .map-stage.is-dragging canvas{ cursor:grabbing; }
+  .map-stage canvas{ user-select:none; }
+  .map-stage canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    image-rendering:pixelated;
+    cursor:grab;
+  }
+  #overlay{ pointer-events:none; }
+
+  /* ---------- floating UI layer ---------- */
+  .ui-layer{
+    position:fixed; inset:0; z-index:10; pointer-events:none;
+    padding:14px; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .ui-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }
+  .ui-col{ display:flex; flex-direction:column; gap:10px; pointer-events:auto; }
+  .ui-col.right{ align-items:flex-end; width:280px; flex:0 0 auto; }
+
+  header.floating{
+    pointer-events:auto;
+    background:rgba(18,23,31,0.72); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--border); padding:10px 14px; max-width:420px;
+  }
+  header.floating h1{
+    font-family:var(--font-head); font-weight:700; font-size:18px; letter-spacing:0.2px;
+    margin:0; display:flex; align-items:center; gap:8px;
+  }
+  header.floating h1 .dot{ width:8px; height:8px; background:var(--accent); border-radius:50%; display:inline-block; }
+  header.floating p{ margin:3px 0 0; color:var(--text-dim); font-size:12px; }
+
+  .tile-readout{
+    pointer-events:auto;
+    display:flex; justify-content:space-between; gap:14px; font-family:var(--font-mono);
+    font-size:12px; color:var(--text-dim);
+    background:rgba(18,23,31,0.72); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--border); padding:8px 12px; max-width:520px;
+  }
+  .tile-readout span b{ color:var(--text); font-weight:600; }
+
+  .panel{
+    border:1px solid var(--border); background:rgba(18,23,31,0.72);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    padding:12px 14px; width:100%;
+  }
+  .panel h2{
+    font-family:var(--font-head); font-size:12px; letter-spacing:0.5px; margin:0 0 10px;
+    color:var(--text-dim); font-weight:600; text-transform:uppercase;
+  }
+  .stat-row{ display:flex; justify-content:space-between; align-items:baseline; margin:5px 0; font-size:13px; }
+  .stat-row .v{ font-family:var(--font-mono); font-weight:600; color:var(--text); }
+  .bar{ height:7px; background:var(--panel-2); border:1px solid var(--border); margin-top:4px; overflow:hidden; }
+  .bar > i{ display:block; height:100%; background:var(--accent); }
+
+  .slider-row{ margin-top:10px; }
+  .slider-row .lab{ display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim); margin-bottom:4px; }
+  .slider-row .lab b{ color:var(--accent); font-family:var(--font-mono); }
+  input[type=range]{ width:100%; accent-color:var(--accent); }
+
+  .btn-row{ display:flex; gap:8px; margin-top:12px; }
+  button{
+    font-family:var(--font-body); font-size:13px; font-weight:600; cursor:pointer;
+    background:var(--panel-2); color:var(--text); border:1px solid var(--border);
+    padding:8px 12px; flex:1;
+  }
+  button:hover{ border-color:var(--accent); color:var(--accent); }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:var(--accent-dim); border-color:var(--accent); color:#eafbff; }
+  button.active{ background:var(--accent); border-color:var(--accent); color:#062229; }
+  button:disabled{ opacity:0.45; cursor:not-allowed; }
+  button:disabled:hover{ border-color:var(--border); color:var(--text); }
+
+  .lb-row{
+    display:flex; align-items:center; gap:8px; font-size:12.5px; padding:4px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .lb-row:last-child{ border-bottom:none; }
+  .lb-swatch{ width:9px; height:9px; flex:0 0 auto; }
+  .lb-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lb-name.you{ color:var(--accent); font-weight:700; }
+  .lb-name.dead{ color:var(--text-dim); text-decoration:line-through; }
+  .lb-pct{ font-family:var(--font-mono); color:var(--text-dim); font-size:12px; }
+
+  #log{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim); max-height:150px; overflow-y:auto; }
+  #log div{ padding:3px 0; border-bottom:1px dashed var(--border); }
+  #log div:last-child{ border-bottom:none; }
+  #log div.you{ color:var(--text); }
+
+  details.help{
+    border:1px solid var(--border); background:rgba(18,23,31,0.72);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    padding:10px 14px; font-size:13px; width:100%;
+  }
+  details.help summary{ cursor:pointer; font-family:var(--font-head); font-size:12px; letter-spacing:0.5px; text-transform:uppercase; color:var(--text-dim); }
+  details.help ul{ margin:10px 0 0; padding-left:18px; line-height:1.6; }
+  details.help li{ margin-bottom:4px; }
+
+  /* ---------- camera controls ---------- */
+  .camera-controls{
+    position:fixed; right:14px; bottom:14px; z-index:30;
+    display:flex; align-items:center; gap:6px;
+    pointer-events:auto;
+    background:rgba(18,23,31,0.78);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--border);
+    padding:6px;
+  }
+  .camera-controls button{
+    flex:0 0 auto; width:34px; height:32px; padding:0;
+    display:grid; place-items:center; font-size:16px;
+  }
+  .camera-controls .zoom-readout{
+    min-width:58px; text-align:center;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+  }
+  .ui-toggle{
+    position:fixed; right:14px; top:14px; z-index:40;
+    width:40px; height:36px; padding:0;
+    pointer-events:auto;
+    background:rgba(18,23,31,0.82);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-size:17px;
+  }
+  
+  .naval-status{font-size:12px;color:var(--text-dim);margin-top:8px;}
+  .ship-marker{position:absolute;pointer-events:none;font-size:18px;filter:drop-shadow(0 2px 2px #000);}
+  .naval-active{outline:1px solid var(--accent);box-shadow:0 0 0 2px rgba(41,182,216,.16);}
+
+.ui-layer.ui-hidden{ display:none; }
+  body.ui-hidden-mode .camera-controls{ right:14px; bottom:14px; }
+  @media (max-width:760px){
+    .camera-controls{ right:8px; bottom:8px; }
+    .ui-toggle{ right:8px; top:8px; }
+  }
+
+  .overlay-screen{
+    position:absolute; inset:0; background:rgba(8,10,14,0.86);
+    display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+    text-align:center; padding:20px; pointer-events:auto;
+  }
+  .overlay-screen.show{ display:flex; }
+  .overlay-screen h2{ font-family:var(--font-head); font-size:30px; margin:0; letter-spacing:0.5px; }
+  .overlay-screen h2.win{ color:var(--good); }
+  .overlay-screen h2.lose{ color:var(--danger); }
+  .overlay-screen p{ margin:0; color:var(--text-dim); font-size:14px; }
+
+  @media (max-width: 760px){
+    .ui-row{ flex-direction:column; }
+    .ui-col.right{ width:100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="country-modal" id="countryModal">
+    <div class="country-card">
+      <div class="country-kicker">FRONTLINE · NEW CAMPAIGN</div>
+      <h2>Choose your country</h2>
+      <p>Pick your starting nation and enter your commander name. Your territory label will grow with your empire.</p>
+      <label>Player name<input id="playerNameInput" maxlength="20" value="Player" autocomplete="off"></label>
+      <label>Starting country<select id="countrySelect"></select></label>
+      <button class="primary" id="startCampaignBtn">Start campaign</button>
+    </div>
+  </div>
+
+  <div class="map-frame">
+    <div class="map-stage">
+      <canvas id="map"></canvas>
+      <canvas id="overlay"></canvas>
+      <div class="overlay-screen" id="endScreen">
+        <h2 id="endTitle">VICTORY</h2>
+        <p id="endSub">You control the map.</p>
+        <button class="primary" style="flex:0 0 auto; padding:10px 22px;" onclick="restart()">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="ui-toggle" id="uiToggle" title="Hide interface" aria-label="Hide interface">◉</button>
+  <div class="camera-controls" id="cameraControls">
+    <button id="zoomOutBtn" title="Zoom out" aria-label="Zoom out">−</button>
+    <div class="zoom-readout" id="zoomReadout">180%</div>
+    <button id="zoomInBtn" title="Zoom in" aria-label="Zoom in">+</button>
+    <button id="zoomResetBtn" title="Reset view" aria-label="Reset view">⌂</button>
+    <button id="namesToggleBtn" title="Hide player names" aria-label="Hide player names">♙</button>
+  </div>
+
+  <div class="ui-layer">
+    <div class="ui-row">
+      <header class="floating">
+        <h1><span class="dot"></span>FRONTLINE <span style="color:var(--text-dim); font-weight:500; font-size:12px;">— single-player prototype</span></h1>
+        <p>A stripped-down, one-player build of the OpenFront idea — real Earth map, bots, and a growing economy.</p>
+      </header>
+
+      <div class="ui-col right">
+        <div class="panel">
+          <h2>Your forces</h2>
+          <div class="stat-row"><span>Territory</span><span class="v" id="youPct">0%</span></div>
+          <div class="bar"><i id="youBar" style="width:0%"></i></div>
+          <div class="stat-row" style="margin-top:8px;"><span>Troops</span><span class="v" id="youTroops">0</span></div>
+          <div class="stat-row"><span>Gold</span><span class="v" id="youGold">0</span></div>
+
+          <div class="slider-row">
+            <div class="lab"><span>Attack force</span><b id="pctLabel">35%</b></div>
+            <input type="range" id="pctSlider" min="10" max="100" value="35">
+          </div>
+
+          <div id="offensives" style="margin-top:10px; font-size:12.5px;"></div>
+
+          <div class="btn-row">
+            <button id="pauseBtn" onclick="togglePause()">Pause</button>
+            <button onclick="restart()">Restart</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Build</h2>
+          <div class="btn-row" style="margin-top:0;">
+            <button id="buildCityBtn" onclick="setBuildMode('city')">City · <span id="cityCostLabel"></span>g</button>
+            <button id="buildPortBtn" onclick="setBuildMode('port')">Port · <span id="portCostLabel"></span>g</button>
+            <button id="buildWarshipBtn" onclick="setBuildMode('warship')">Warship · <span id="warshipCostLabel"></span>g</button>
+            <button id="launchShipBtn" onclick="setShipMode()">Naval invasion</button>
+          </div>
+          <div class="naval-status" id="navalStatus">Warships: 0 · Transports: 0</div>
+          <p id="buildHint" style="font-size:11.5px; color:var(--text-dim); margin:8px 0 0;">Cities boost troop growth. Ports boost gold. Warships and naval invasions both need a port first — build one on a coastal tile you own.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui-row" style="align-items:flex-end;">
+      <div class="ui-col" style="max-width:520px;">
+        <div class="tile-readout">
+          <span id="tileInfo">Hover the map to inspect terrain</span>
+          <span>Tiles: <b id="totalLandLabel">–</b></span>
+        </div>
+        <div class="panel">
+          <h2>Dispatches</h2>
+          <div id="log"></div>
+        </div>
+        <details class="help">
+          <summary>How to play</summary>
+          <ul>
+            <li>The white box follows your cursor. When a red dashed box snaps onto a nearby tile, that is the tile your click will hit — you do not need pixel-perfect aim.</li>
+            <li>Click any lit-up tile bordering your territory to open an offensive there — your troops then push across that whole contact line on their own, tick after tick.</li>
+            <li>The attack slider sets what share of your troop pool you commit; click again on the same rival to reinforce that offensive.</li>
+            <li>Troops regrow each tick based on how much land — and what kind — you hold.</li>
+            <li>Darker tiles are mountains: slower to grow, tougher to take.</li>
+            <li>Your troops can storm a shore across a narrow strait, so an island nation can still expand — it just costs about twice as much as a land border.</li>
+            <li>Rival bots expand and fight on their own. Control 60% of the land to win.</li>
+            <li>Naval warfare: build a port, commission warships for defence, then launch a naval invasion to send a transport to distant islands and establish a beachhead.</li>
+            <li>Camera: mouse wheel or +/− to zoom, drag the map to pan, and press 0 to reset the view. The interface can be hidden with the ◉ button. Your name grows with territory; ♛ marks the largest empire.</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="ui-col right">
+        <div class="panel">
+          <h2>Standings</h2>
+          <div id="leaderboard"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- config ----------
+  // The land bitmask below is 200x100. The grid used to be upscaled 8x to
+  // 1600x800, which added no detail but made every tile 0.625px wide — you
+  // could not see, click, or meaningfully capture one. Native resolution
+  // gives 5px tiles and a map that can actually be conquered.
+  const COLS=200, ROWS=100, CELL=5;
+  const MAP_PX=1000, MAP_TOP=250, MAP_WORLD_H=500;
+  const NUM_BOTS=7;
+  const HUMAN=0;
+  const TICK_MS=550;
+  const WIN_SHARE=0.6;
+  const WATER=0, LAND=1, MOUNTAIN=2;
+  const CITY_COST=60, PORT_COST=40, WARSHIP_COST=120, TRANSPORT_COST=90;
+  const CITY_GROWTH_BONUS=6, CITY_CAP_BONUS=50;
+  const PORT_GOLD_BONUS=3;
+  const WARSHIP_RANGE=14;
+
+  const BOT_COLORS=['#c1443c','#d1a23d','#8f63c9','#3aa08a','#cf5f92','#5f7fd1','#b5651d'];
+  const YOU_COLOR='#29b6d8';
+  const NAMES=['Bot Alpha','Bot Bravo','Bot Cascade','Bot Delta','Bot Ember','Bot Fenn','Bot Gale'];
+
+  const COUNTRY_DATA=[
+    ['Philippines',128,63],['Japan',145,42],['China',136,42],['India',127,51],
+    ['Indonesia',132,68],['Australia',150,78],['Russia',125,27],['United States',57,37],
+    ['Canada',55,27],['Mexico',53,47],['Brazil',68,64],['Argentina',64,76],
+    ['United Kingdom',94,31],['France',96,37],['Germany',99,34],['Italy',101,39],
+    ['Spain',95,40],['Egypt',104,50],['South Africa',101,76],['Turkey',106,40],
+    ['Saudi Arabia',111,51],['Thailand',127,57],['Vietnam',132,56],['New Zealand',171,84],
+    ['South Korea',140,43],['Papua New Guinea',143,66],['Madagascar',108,68]
+  ];
+  let selectedCountry=COUNTRY_DATA[0][0];
+  let selectedPlayerName='Player';
+
+  // 200x100 source equirectangular land/water bitmask, resampled to the 1000px-wide world layer of Earth (1 bit per cell, row-major, north->south, west->east), base64-packed
+  const EARTH_DATA="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADf/vP/dQAAAAAAAAAAAAAAAAAAAAAAAAAvv8X///4AAA/QAEAAAQAAAAAAAAAAAAAIaf8////8AABYAAAAAAAwAAAAAAAAAAABhLf8D////wAAAAAAAwAAO4AAAAAAAAAAADgFeAA///wAAAAAAGAAP/8AAAAAAAAAAAdzdvsAD//0AAAAAACAgf///8AAAAIAEAAA/wx/wAf/3AQAAAABgd/////f/AAEAf/5/z+bEvgD//AAAB/4BAzf///////uf4H////797k+D/4AAAA//6f/3/////////3n//////9weg/4BcAAfPj////////////8AH//////ODwH4AeAAP39////////////+AP//////AXAAcAAAAfz/////////////+AH+3////gB4AAAAAAH8T///////////w6AABAD///8AfYAAAABBuP//////////wAwAAAAAf///4H/AAAAAYFj//////////4AeAAAQAD////z/4AAAAeAB//////////6APIAAAAAv///+//gAAAGx////////////4BAAAAAAB////v/4AAAAO////////////9AAAAAAAAL////+CAAAAA/////////////QAAAAAAAB/////xwAAAA/////////////gAAAAAAAAf////+gAAAAH//4f////////4AAAAAAAAH////9AAAAAB/v8D////////4QAAAAAAAB////+AAAAAH8M+Af///////wEAAAAAAAAf///+AAAAAB8Amf///////+8CAAAAAAAAH///+AAAAAAfABn///////+CAgAAAAAAAA////wAAAAABhQI////////8QwAAAAAAAAH///4AAAAAAf8Ai///////8M4AAAAAAAAAf//8AAAAAAf/AAP///////ggAAAAAAAAAF//+AAAAAAH/+eH///////4IAAAAAAAAAA//wgAAAAAD/////v//////AAAAAAAAAAAD/AIAAAAAB////v5//////gAAAAAAAAAAAfwAAAAAAA////7/j/////wAAAAAAAAAAAL8AAAAAAAf////fzB////9AAAAAAAAAAAAfAUAAAAAH////z/4H/3/8AAAAAAAAAAAAHwwQAAAAB////+/+A/x/gAAAAAAAAAAAAA+YAwAAAAf////n/AH4P6AAAAAAAAAAAAAD+AAAAAAH////8/gB8D+AQAAAAAAAAAAAAD4AAAAAB/////PgAcAPwAAAAAAAAAAAAAAPAAAAAAf/////AAHgB+AgAAAAAAAAAAAAAwAAAAAH/////AAAwEHgEAAAAAAAAAAAAAMP8AAAA//////AAMAAgAAAAAAAAAAAAAAAH/gAAAH/////wAAgBAAwAAAAAAAAAAAAAB/8AAAA/n///4AAIAIAEAAAAAAAAAAAAAAf/4AAAABf//+AAAAaBwAAAAAAAAAAAAAAH//AAAAAH///AAAADw4AAAAAAAAAAAAAAD//wAAAAB///AAAAAcfYAAAAAAAAAAAABB///AAAAAf//gAAAADHuPAAAAAAAAAAAAAf//4AAAAD//wAAAAA57BuAAAAAAAAAAAAH///4AAAAf/8AAAAAGAwD4gAAAAAAAAAAB////gAAAH//AAAAAAQAAfSAAAAAAAAAAAP///4AAAB//wAAAAAB0AHQYAAAAAAAAAAB///8AAAAf/8AAAAAAAAACAAAAAAAAAAAAf//+AAAAD//AAAAAAAAIAAAAAAAAAAAAAD///AAAAB//4QAAAAAADhAAAAAAAAAAAAA///wAAAAf/+MAAAAAAH8YAAAAAAAAAAAAD//8AAAAH/+HAAAAAAB/+AAAAAAAAAAAAAf//AAAAB//BgAAAAAA//gAAAAAAAAAAAAH//gAAAAf/g4AAAAAB//+AYAAAAAAAAAAB//4AAAAD/8OAAAAAB///wAAAAAAAAAAAAf/wAAAAA//DAAAAAAf//8AAAAAAAAAAAAH/4AAAAAP/AAAAAAAH///gAAAAAAAAAAAD/+AAAAAB/wAAAAAAB///4AAAAAAAAAAAA//AAAAAAf4AAAAAAAP//+AAAAAAAAAAAAP/wAAAAAD+AAAAAAAD///gAAAAAAAAAAAD/4AAAAAA+AAAAAAAA+BfwAAAAAAAAAAAA/wAAAAAAAAAAAAAAAEAP8ACAAAAAAAAAAf+AAAAAAAAAAAAAAAAAA+AAQAAAAAAAAAH+AAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAB/AAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAPgAAAAAAAAAAAAAAAAAAEABgAAAAAAAAAHwAAAAAAAAAAAAAAAAAAAABgAAAAAAAAADwAAAAAAAAAAAAAAAAAAAAA4AAAAAAAAAA+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAfwAP/////AAAAAAAAAAAAAJwAAAAAAAAz//wf//////8AAAAAAAAAAAD8AAAAKH/////8////////+AAAAAAAAgYKPAAAAP////////////////wAAAAAT6D///wAAAP////////////////gAAAH//////uAAAD/////////////////wAAAP//////4AA8P//////////////////AAAAf/////8AAfAP////////////////+AAAAf///////gAP//////////////////4AAB//////////////////////////////8P///////////////////////////////////////////////////////////////////////////////////////////////////w==";
+
+  // ---------- canvas ----------
+  const mapCanvas=document.getElementById('map');
+  const overlayCanvas=document.getElementById('overlay');
+  mapCanvas.width=MAP_PX; mapCanvas.height=MAP_PX;
+  overlayCanvas.width=MAP_PX; overlayCanvas.height=MAP_PX;
+  const ctx=mapCanvas.getContext('2d');
+  const octx=overlayCanvas.getContext('2d');
+  const terrainCanvas=document.createElement('canvas');
+  terrainCanvas.width=MAP_PX; terrainCanvas.height=MAP_WORLD_H;
+  const tctx=terrainCanvas.getContext('2d');
+
+  let terrain, owner, neutralHP, players, totalLand, tickTimer, paused=false, gameOver=false;
+  let structures, structuresList, buildMode=null, activeAttacks={}, ships=[], shipMode=false;
+
+  // ---------- camera ----------
+  const CAMERA_MIN=1.0;
+  const CAMERA_MAX=12.0;
+  const CAMERA_START=2.0;
+  let cameraZoom=CAMERA_START;
+  let cameraX=0, cameraY=0;
+  let dragging=false, dragMoved=false, dragStartX=0, dragStartY=0, panStartX=0, panStartY=0, hoveredCell=-1;
+  let snapCell=-1;
+  let showPlayerNames=true;
+
+  function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+
+  function applyCamera(){
+    const stage=document.querySelector('.map-stage');
+    stage.style.transform=`translate3d(${cameraX}px,${cameraY}px,0) scale(${cameraZoom})`;
+    document.getElementById('zoomReadout').textContent=Math.round(cameraZoom*100)+'%';
+    drawOverlay();
+  }
+
+  function resetCamera(){
+    cameraZoom=CAMERA_START;
+    cameraX=0; cameraY=0;
+    applyCamera();
+  }
+
+  function changeZoom(amount){
+    cameraZoom=clamp(cameraZoom+amount,CAMERA_MIN,CAMERA_MAX);
+    applyCamera();
+  }
+
+  function zoomTo(newZoom){
+    cameraZoom=clamp(newZoom,CAMERA_MIN,CAMERA_MAX);
+    applyCamera();
+  }
+
+  function idx(x,y){ return y*COLS+x; }
+  function inBounds(x,y){ return x>=0&&x<COLS&&y>=0&&y<ROWS; }
+  function neighbors(x,y){
+    return [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(p=>inBounds(p[0],p[1]));
+  }
+
+  function isCoastal(i){
+    const x=i%COLS, y=(i/COLS)|0;
+    for(const [nx,ny] of neighbors(x,y)){
+      if(terrain[idx(nx,ny)]===WATER) return true;
+    }
+    return false;
+  }
+
+  function mixHex(hex, amt){ // darken hex by amt (0-1)
+    const n=parseInt(hex.slice(1),16);
+    let r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    r=Math.round(r*(1-amt)); g=Math.round(g*(1-amt)); b=Math.round(b*(1-amt));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ---------- map generation ----------
+  function decodeEarthData(){
+    // Decode the original 200x100 source map, then nearest-neighbor resample
+    // it to the gameplay grid. The visible world itself remains 2:1, centered
+    // inside the 1000x1000 map canvas so the whole Earth and its islands are visible.
+    const SRC_COLS=200, SRC_ROWS=100;
+    const bin=atob(EARTH_DATA);
+    const source=new Uint8Array(SRC_COLS*SRC_ROWS);
+    for(let i=0;i<source.length;i++){
+      const byte=bin.charCodeAt(i>>3);
+      source[i]=(byte >> (7-(i&7))) & 1;
+    }
+    const bits=new Uint8Array(COLS*ROWS);
+    for(let y=0;y<ROWS;y++){
+      const sy=Math.min(SRC_ROWS-1,Math.floor(y*SRC_ROWS/ROWS));
+      for(let x=0;x<COLS;x++){
+        const sx=Math.min(SRC_COLS-1,Math.floor(x*SRC_COLS/COLS));
+        bits[idx(x,y)]=source[sy*SRC_COLS+sx];
+      }
+    }
+    return bits;
+  }
+
+  function genMap(){
+    const land=decodeEarthData();
+    terrain=new Uint8Array(COLS*ROWS);
+    for(let i=0;i<terrain.length;i++) terrain[i]=land[i]?LAND:WATER;
+
+    // drop single-pixel noise (isolated land specks with no land neighbor)
+    function countLandNbrs(x,y){
+      let c=0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        if(dx===0&&dy===0) continue;
+        const nx=x+dx, ny=y+dy;
+        if(!inBounds(nx,ny)) continue;
+        if(terrain[idx(nx,ny)]===LAND) c++;
+      }
+      return c;
+    }
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      const i=idx(x,y);
+      if(terrain[i]===LAND && countLandNbrs(x,y)===0) terrain[i]=WATER;
+    }
+
+    // keep only sizeable connected landmasses (drops tiny noise islands, keeps real small islands)
+    const visited=new Uint8Array(COLS*ROWS);
+    const comps=[];
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      const i=idx(x,y);
+      if(terrain[i]===LAND && !visited[i]){
+        const stack=[[x,y]]; visited[i]=1; const tiles=[i];
+        while(stack.length){
+          const [cx,cy]=stack.pop();
+          for(const [nx,ny] of neighbors(cx,cy)){
+            const ni=idx(nx,ny);
+            if(terrain[ni]===LAND && !visited[ni]){ visited[ni]=1; tiles.push(ni); stack.push([nx,ny]); }
+          }
+        }
+        comps.push(tiles);
+      }
+    }
+    const minSize=2;
+    for(const tiles of comps){ if(tiles.length<minSize){ for(const i of tiles) terrain[i]=WATER; } }
+
+    // mountains (no elevation data — scattered on land as before)
+    for(let i=0;i<terrain.length;i++){
+      if(terrain[i]===LAND && Math.random()<0.13) terrain[i]=MOUNTAIN;
+    }
+
+    // pre-render terrain layer with coastline strokes
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      const i=idx(x,y);
+      const t=terrain[i];
+      tctx.fillStyle = t===WATER?'#0e2233':(t===MOUNTAIN?'#463f37':'#5c6b4d');
+      tctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+    }
+    tctx.strokeStyle='rgba(255,255,255,0.14)';
+    tctx.lineWidth=1;
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      if(terrain[idx(x,y)]===WATER) continue;
+      for(const [nx,ny] of neighbors(x,y)){
+        if(terrain[idx(nx,ny)]===WATER){
+          tctx.beginPath();
+          if(nx>x){ tctx.moveTo((x+1)*CELL,y*CELL); tctx.lineTo((x+1)*CELL,(y+1)*CELL); }
+          else if(nx<x){ tctx.moveTo(x*CELL,y*CELL); tctx.lineTo(x*CELL,(y+1)*CELL); }
+          else if(ny>y){ tctx.moveTo(x*CELL,(y+1)*CELL); tctx.lineTo((x+1)*CELL,(y+1)*CELL); }
+          else { tctx.moveTo(x*CELL,y*CELL); tctx.lineTo((x+1)*CELL,y*CELL); }
+          tctx.stroke();
+        }
+      }
+    }
+  }
+
+  // ---------- players & spawns ----------
+  function setupPlayers(){
+    owner=new Int8Array(COLS*ROWS).fill(-1);
+    neutralHP=new Float32Array(COLS*ROWS);
+    for(let i=0;i<terrain.length;i++){
+      if(terrain[i]===LAND) neutralHP[i]=2;
+      else if(terrain[i]===MOUNTAIN) neutralHP[i]=6;
+    }
+
+    const landTiles=[];
+    for(let i=0;i<terrain.length;i++) if(terrain[i]!==WATER) landTiles.push(i);
+    totalLand=landTiles.length;
+
+    const candidates=landTiles.filter(i=>terrain[i]===LAND);
+    shuffle(candidates);
+
+    function nearestLandFromSource(sx,sy){
+      let best=-1,bestD=Infinity;
+      for(const i of candidates){
+        const x=i%COLS, y=(i/COLS)|0;
+        const d=Math.abs(x-sx)+Math.abs(y-sy);
+        if(d<bestD){bestD=d;best=i;}
+      }
+      return best;
+    }
+
+    const numPlayers=NUM_BOTS+1;
+    const chosen=COUNTRY_DATA.find(c=>c[0]===selectedCountry)||COUNTRY_DATA[0];
+    const humanSourceX=Math.round(chosen[1]*COLS/200);
+    const humanSourceY=Math.round(chosen[2]*ROWS/100);
+    const humanSpawn=nearestLandFromSource(humanSourceX,humanSourceY);
+    const spawns=[humanSpawn];
+    let minDist=Math.max(18, Math.floor(Math.min(COLS,ROWS)/5));
+    for(const i of candidates){
+      if(spawns.length>=numPlayers) break;
+      const x=i%COLS,y=(i/COLS)|0;
+      if(spawns.every(s=>Math.abs((s%COLS)-x)+Math.abs(((s/COLS)|0)-y)>=minDist)) spawns.push(i);
+    }
+    while(spawns.length<numPlayers) spawns.push(candidates[spawns.length%candidates.length]);
+
+    players=[];
+    const palette=[YOU_COLOR, ...BOT_COLORS];
+    const names=[selectedPlayerName, ...NAMES];
+    for(let p=0;p<numPlayers;p++){
+      players.push({
+        id:p, name:names[p], country:p===HUMAN?selectedCountry:'AI Nation '+(p), color:palette[p], isHuman:p===HUMAN,
+        troops:110, gold:20, tileCount:0, mountainCount:0,
+        cityCount:0, portCount:0,
+        borderTiles:[], borderCount:0, attackTargets:new Set(),
+        cooldown:0, buildCooldown:6+Math.floor(Math.random()*6), alive:true
+      });
+    }
+
+    structures={}; structuresList=[];
+    activeAttacks={};
+
+    // claim starting blobs via BFS
+    for(let p=0;p<numPlayers;p++){
+      const start=spawns[p];
+      if(start===undefined) continue;
+      const want=9;
+      const seen=new Set([start]);
+      const queue=[start];
+      const claimed=[];
+      while(queue.length && claimed.length<want){
+        const cur=queue.shift();
+        if(owner[cur]===-1 && terrain[cur]!==WATER){
+          owner[cur]=p; claimed.push(cur);
+          if(terrain[cur]===MOUNTAIN) players[p].mountainCount++;
+        }
+        const cx=cur%COLS, cy=(cur/COLS)|0;
+        for(const [nx,ny] of neighbors(cx,cy)){
+          const ni=idx(nx,ny);
+          if(!seen.has(ni) && terrain[ni]!==WATER){ seen.add(ni); queue.push(ni); }
+        }
+      }
+      players[p].tileCount=claimed.length;
+    }
+  }
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+  }
+
+  // ---------- frontier computation ----------
+  // How far troops can storm across shallow water. Without this an island
+  // start (the Philippines is the default country!) has zero land neighbours,
+  // so attackTargets stays empty and the player can never capture anything.
+  const STRAIT=3;
+  let borderFlag=null;
+
+  function computeFrontiers(){
+    for(const p of players){ p.borderTiles.length=0; p.attackTargets.clear(); }
+    if(!borderFlag || borderFlag.length!==COLS*ROWS) borderFlag=new Uint8Array(COLS*ROWS);
+    else borderFlag.fill(0);
+    const coastal=[];
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      const i=idx(x,y);
+      const o=owner[i];
+      if(o===-1 || terrain[i]===WATER) continue;
+      const p=players[o];
+      let isBorder=false, touchesWater=false;
+      for(const [nx,ny] of neighbors(x,y)){
+        const ni=idx(nx,ny);
+        if(terrain[ni]===WATER){ touchesWater=true; continue; }
+        if(owner[ni]!==o){ isBorder=true; p.attackTargets.add(ni); }
+      }
+      if(touchesWater) coastal.push(i);
+      if(isBorder){ p.borderTiles.push(i); borderFlag[i]=1; }
+    }
+    // amphibious frontier across narrow straits
+    for(const i of coastal){
+      const o=owner[i], p=players[o];
+      const x0=i%COLS, y0=(i/COLS)|0;
+      let added=false;
+      for(let dy=-STRAIT;dy<=STRAIT;dy++){
+        const y=y0+dy; if(y<0||y>=ROWS) continue;
+        for(let dx=-STRAIT;dx<=STRAIT;dx++){
+          const x=x0+dx; if(x<0||x>=COLS) continue;
+          const t=idx(x,y);
+          if(terrain[t]===WATER || owner[t]===o) continue;
+          p.attackTargets.add(t); added=true;
+        }
+      }
+      if(added && !borderFlag[i]){ p.borderTiles.push(i); borderFlag[i]=1; }
+    }
+    for(const p of players) p.borderCount=p.borderTiles.length;
+  }
+
+  // A shore reached only across water costs more to storm than a land border.
+  function isAmphibious(pid, t){
+    const x=t%COLS, y=(t/COLS)|0;
+    for(const [nx,ny] of neighbors(x,y)) if(owner[idx(nx,ny)]===pid) return false;
+    return true;
+  }
+
+  // ---------- combat ----------
+  function attackTile(playerIdx, targetIdx, sentTroops){
+    const attacker=players[playerIdx];
+    sentTroops=Math.min(sentTroops, attacker.troops);
+    if(sentTroops<1) return;
+    attacker.troops-=sentTroops;
+    const isMountain=terrain[targetIdx]===MOUNTAIN;
+    const defOwner=owner[targetIdx];
+
+    if(defOwner===-1){
+      const defense=neutralHP[targetIdx];
+      if(sentTroops>defense){
+        owner[targetIdx]=playerIdx;
+        attacker.troops+=(sentTroops-defense);
+        attacker.tileCount++;
+        if(isMountain) attacker.mountainCount++;
+        neutralHP[targetIdx]=0;
+        log(`${attacker.name} claimed unclaimed ${isMountain?'high ground':'territory'}.`, attacker);
+      } else {
+        neutralHP[targetIdx]-=sentTroops;
+      }
+    } else if(defOwner!==playerIdx){
+      const defender=players[defOwner];
+      const defBorder=Math.max(1, defender.borderCount);
+      const defenseShare=Math.max(1, (defender.troops/defBorder)*(isMountain?1.6:1));
+      if(sentTroops>defenseShare){
+        defender.troops=Math.max(0, defender.troops-defenseShare);
+        defender.tileCount--;
+        if(isMountain) defender.mountainCount--;
+        owner[targetIdx]=playerIdx;
+        attacker.troops+=(sentTroops-defenseShare);
+        attacker.tileCount++;
+        if(isMountain) attacker.mountainCount++;
+        log(`${attacker.name} took a tile from ${defender.name}.`, attacker);
+        if(defender.tileCount<=0 && defender.alive){
+          defender.alive=false;
+          log(`${defender.name} has been eliminated.`, null);
+        }
+      } else {
+        defender.troops=Math.max(0, defender.troops-sentTroops*0.5);
+        log(`${attacker.name}'s assault on ${defender.name} was repelled.`, attacker.isHuman?attacker:null);
+      }
+    } else {
+      attacker.troops+=sentTroops; // no-op safety
+    }
+  }
+
+  // ---------- log ----------
+  function log(msg, actor){
+    const el=document.getElementById('log');
+    const div=document.createElement('div');
+    if(actor && actor.isHuman) div.className='you';
+    div.textContent=msg;
+    el.insertBefore(div, el.firstChild);
+    while(el.children.length>10) el.removeChild(el.lastChild);
+  }
+
+  // ---------- bot AI ----------
+  function botAct(p){
+    if(p.cooldown>0){ p.cooldown--; return; }
+    p.cooldown=1+Math.floor(Math.random()*3);
+    if(p.troops<15) return;
+    const targets=Array.from(p.attackTargets);
+    if(!targets.length) return;
+    const scored=targets.map(t=>({t, score:-estDefense(t)+Math.random()*3+(owner[t]===-1?1.5:0)}));
+    scored.sort((a,b)=>b.score-a.score);
+    const front=scored.slice(0,14).map(s=>s.t);
+    const pct=0.25+Math.random()*0.35;
+    pushFront(p.id, p.troops*pct, 8, front);
+  }
+
+  // ---------- naval warfare ----------
+  function ownedCoastalPort(p){
+    for(const i of structuresList){
+      if(owner[i]===p.id && structures[i]==='port') return i;
+    }
+    return -1;
+  }
+
+  function landmassAt(start){
+    if(start<0 || terrain[start]===WATER) return [];
+    const seen=new Set([start]), q=[start], out=[];
+    while(q.length){
+      const cur=q.pop(); out.push(cur);
+      const x=cur%COLS, y=(cur/COLS)|0;
+      for(const [nx,ny] of neighbors(x,y)){
+        const ni=idx(nx,ny);
+        if(terrain[ni]!==WATER && !seen.has(ni)){seen.add(ni);q.push(ni);}
+      }
+    }
+    return out;
+  }
+
+  function findIslandTarget(){
+    const you=players[HUMAN];
+    const ownedMass=new Set();
+    for(let i=0;i<owner.length;i++) if(owner[i]===HUMAN) ownedMass.add(i);
+    const candidates=[];
+    // Prefer unclaimed land separated from the player's current land by water.
+    for(let i=0;i<owner.length;i++){
+      if(terrain[i]===WATER || owner[i]===HUMAN) continue;
+      const x=i%COLS,y=(i/COLS)|0;
+      let coastal=false;
+      for(const [nx,ny] of neighbors(x,y)) if(terrain[idx(nx,ny)]===WATER){coastal=true;break;}
+      if(coastal) candidates.push(i);
+    }
+    if(!candidates.length) return -1;
+    shuffle(candidates);
+    return candidates[0];
+  }
+
+  function launchNavalInvasion(target){
+    const you=players[HUMAN];
+    const port=ownedCoastalPort(you);
+    if(port<0){log('Build a port before launching a naval invasion.',you); return false;}
+    if(you.gold<TRANSPORT_COST){log('Not enough gold for a transport.',you);return false;}
+    const tx=target%COLS, ty=(target/COLS)|0;
+    const px=port%COLS, py=(port/COLS)|0;
+    you.gold-=TRANSPORT_COST;
+    ships.push({id:Date.now()+Math.random(),type:'transport',owner:HUMAN,x:px,y:py,tx,ty,progress:0,attack:35,defense:12,alive:true,target});
+    log(`Naval transport launched toward a distant island.`,you);
+    return true;
+  }
+
+  function processNaval(){
+    for(const ship of ships){
+      if(!ship.alive) continue;
+      if(ship.progress<1){
+        ship.progress=Math.min(1,ship.progress+0.055);
+        ship.x += (ship.tx-ship.x)*0.12; ship.y += (ship.ty-ship.y)*0.12;
+        if(ship.progress>=1){ ship.x=ship.tx; ship.y=ship.ty; }
+        continue;
+      }
+      const target=ship.target;
+      if(target>=0 && terrain[target]!==WATER){
+        const targetOwner=owner[target];
+        if(targetOwner!==HUMAN){
+          const atk=ship.attack + Math.random()*18;
+          const def=targetOwner===-1 ? neutralHP[target]*2 : players[targetOwner].troops/Math.max(1,players[targetOwner].borderCount)*1.2;
+          if(atk>=def || targetOwner===-1){
+            const mass=new Set(landmassAt(target));
+            const beach=[]; const seen=new Set([target]); const q=[target];
+            while(q.length && beach.length<36){
+              const cur=q.shift();
+              if(owner[cur]!==HUMAN && terrain[cur]!==WATER) beach.push(cur);
+              const x=cur%COLS,y=(cur/COLS)|0;
+              for(const [nx,ny] of neighbors(x,y)){
+                const ni=idx(nx,ny);
+                if(mass.has(ni) && !seen.has(ni)){seen.add(ni);q.push(ni);}
+              }
+            }
+            for(const take of beach){
+              const oldOwner=owner[take];
+              if(oldOwner>=0) players[oldOwner].tileCount=Math.max(0,players[oldOwner].tileCount-1);
+              owner[take]=HUMAN; players[HUMAN].tileCount++;
+            }
+            log(`Naval landing secured a ${beach.length}-tile beachhead.`,players[HUMAN]);
+          }
+        }
+        // Transport becomes a cheap garrison after landing.
+        ship.alive=false; players[HUMAN].troops+=20;
+      }
+    }
+    ships=ships.filter(s=>s.alive);
+  }
+
+  function processNavalDefense(){
+    const you=players[HUMAN];
+    const warships=ships.filter(s=>s.owner===HUMAN && s.type==='warship');
+    // Defensive patrol: enemy naval units that enter a defended coastal radius are intercepted.
+    for(const enemy of ships.filter(s=>s.owner!==HUMAN && s.type==='transport')){
+      for(const w of warships){
+        const d=Math.hypot(enemy.x-w.x,enemy.y-w.y);
+        if(d<WARSHIP_RANGE){ enemy.alive=false; log('Warship intercepted an enemy invasion fleet.',you); break; }
+      }
+    }
+  }
+
+  function buildWarship(){
+    const you=players[HUMAN], port=ownedCoastalPort(you);
+    if(port<0){log('A warship requires one of your ports.',you);return;}
+    if(you.gold<WARSHIP_COST){log('Not enough gold to build a warship.',you);return;}
+    you.gold-=WARSHIP_COST;
+    const px=port%COLS,py=(port/COLS)|0;
+    ships.push({id:Date.now()+Math.random(),type:'warship',owner:HUMAN,x:px,y:py,tx:px,ty:py,progress:1,attack:90,defense:120,alive:true,patrol:0});
+    log('Warship commissioned for coastal defence.',you);
+  }
+
+  window.setShipMode=function(){
+    const you=players&&players[HUMAN];
+    if(!you) return;
+    if(!shipMode){
+      if(ownedCoastalPort(you)<0){ log('Build a port first — invasions sail from a port.',you); return; }
+      if(you.gold<TRANSPORT_COST){ log(`A transport costs ${TRANSPORT_COST} gold.`,you); return; }
+    }
+    shipMode=!shipMode;
+    buildMode=null;
+    document.getElementById('buildCityBtn').classList.remove('active');
+    document.getElementById('buildPortBtn').classList.remove('active');
+    document.getElementById('buildWarshipBtn').classList.remove('active');
+    document.getElementById('launchShipBtn').classList.toggle('naval-active',shipMode);
+    drawOverlay();
+  };
+
+  function botMaybeBuild(p){
+    if(p.buildCooldown>0){ p.buildCooldown--; return; }
+    p.buildCooldown=10+Math.floor(Math.random()*8);
+    const ownTiles=[];
+    for(let i=0;i<owner.length;i++) if(owner[i]===p.id && !structures[i]) ownTiles.push(i);
+    if(!ownTiles.length) return;
+    shuffle(ownTiles);
+    if(p.gold>=CITY_COST && Math.random()<0.6){
+      structures[ownTiles[0]]='city'; structuresList.push(ownTiles[0]); p.gold-=CITY_COST;
+      return;
+    }
+    if(p.gold>=PORT_COST){
+      const coastal=ownTiles.find(isCoastal);
+      if(coastal){ structures[coastal]='port'; structuresList.push(coastal); p.gold-=PORT_COST; }
+    }
+  }
+
+  // ---------- tick ----------
+  // ---------- continuous front attacks ----------
+  // A click declares an offensive against a target owner (or neutral). Each tick,
+  // the committed troop pool automatically pushes across the *entire* contact
+  // border with that target — the frontier advances on its own, OpenFront-style,
+  // instead of requiring one click per tile.
+  // What a tile will cost to take, using the same maths attackTile applies.
+  function estDefense(t){
+    const isMountain=terrain[t]===MOUNTAIN;
+    const o=owner[t];
+    if(o===-1) return neutralHP[t];
+    const d=players[o];
+    return (d.troops/Math.max(1,d.borderCount))*(isMountain?1.6:1);
+  }
+
+  // Spend a budget along a front, cheapest tiles first, sending each tile just
+  // enough to actually capture it. Spreading the budget evenly (the old
+  // behaviour) meant every tile got less than its defence and nothing fell.
+  function pushFront(pid, budget, maxTiles, targets){
+    const p=players[pid];
+    const scored=targets.map(t=>({
+      t,
+      cost:(estDefense(t)*1.06+0.6+Math.random()*0.4) * (isAmphibious(pid,t)?2.1:1)
+    }));
+    scored.sort((a,b)=>a.cost-b.cost);
+    let spent=0, taken=0;
+    for(const s of scored){
+      if(taken>=maxTiles) break;
+      if(budget<s.cost) break; // sorted ascending — nothing cheaper remains
+      budget-=s.cost; spent+=s.cost; taken++;
+      p.troops+=s.cost; // hand to the live pool so attackTile's own deduction applies
+      attackTile(pid, s.t, s.cost);
+    }
+    return spent;
+  }
+
+  function processActiveAttacks(){
+    const you=players[HUMAN];
+    const MAX_FRONT_TILES=12;
+    for(const key of Object.keys(activeAttacks)){
+      const atk=activeAttacks[key];
+      if(atk.troops<1){ you.troops+=atk.troops; delete activeAttacks[key]; continue; }
+      const targets=Array.from(you.attackTargets).filter(i=>owner[i]===atk.targetOwner);
+      if(!targets.length){
+        you.troops+=atk.troops; // front reached its end — reinforcements come home
+        delete activeAttacks[key];
+        continue;
+      }
+      const budget=Math.min(atk.troops, Math.max(12, atk.troops*0.5));
+      const spent=pushFront(HUMAN, budget, MAX_FRONT_TILES, targets);
+      atk.troops-=spent;
+      atk.stall = spent>0 ? 0 : (atk.stall||0)+1;
+      if(atk.stall>=6){
+        you.troops+=atk.troops;
+        log('An offensive stalled — the front is too strong. Troops recalled.', you);
+        delete activeAttacks[key];
+        continue;
+      }
+      if(atk.troops<1){ you.troops+=atk.troops; delete activeAttacks[key]; }
+    }
+  }
+
+  function tick(){
+    if(paused||gameOver) return;
+    computeFrontiers();
+    processActiveAttacks();
+    processNaval();
+    processNavalDefense();
+    computeFrontiers();
+
+    for(const p of players){ p.cityCount=0; p.portCount=0; }
+    for(const i of structuresList){
+      const o=owner[i];
+      if(o===-1) continue;
+      if(structures[i]==='city') players[o].cityCount++;
+      else if(structures[i]==='port') players[o].portCount++;
+    }
+
+    for(const p of players){
+      if(!p.alive) continue;
+      const nonMountain=p.tileCount-p.mountainCount;
+      const growth=1.5 + nonMountain*0.55 + p.mountainCount*0.25 + p.cityCount*CITY_GROWTH_BONUS;
+      const cap=40 + p.tileCount*9 + p.cityCount*CITY_CAP_BONUS;
+      p.troops=Math.min(cap, p.troops+growth);
+      p.gold += 0.5 + p.tileCount*0.06 + p.portCount*PORT_GOLD_BONUS;
+    }
+
+    for(const p of players){
+      if(!p.isHuman && p.alive){ botAct(p); botMaybeBuild(p); }
+    }
+
+    checkEnd();
+    render();
+    updateHUD();
+  }
+
+  function checkEnd(){
+    if(gameOver) return;
+    const you=players[HUMAN];
+    if(you.tileCount<=0){ endGame('lose'); return; }
+    const alive=players.filter(p=>p.tileCount>0);
+    if(alive.length===1){ endGame(alive[0].isHuman?'win':'lose', alive[0]); return; }
+    for(const p of players){
+      if(p.tileCount/totalLand>=WIN_SHARE){ endGame(p.isHuman?'win':'lose', p); return; }
+    }
+  }
+
+  function endGame(kind, winner){
+    gameOver=true;
+    const screen=document.getElementById('endScreen');
+    const title=document.getElementById('endTitle');
+    const sub=document.getElementById('endSub');
+    screen.classList.add('show');
+    if(kind==='win'){
+      title.textContent='VICTORY';
+      title.className='win';
+      sub.textContent='You hold the map. Well fought.';
+    } else {
+      title.textContent='DEFEAT';
+      title.className='lose';
+      sub.textContent = winner ? `${winner.name} dominates the map.` : 'Your territory has fallen.';
+    }
+    document.getElementById('pauseBtn').textContent='Pause';
+  }
+
+  // ---------- render ----------
+  function render(){
+    ctx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
+    ctx.save();
+    ctx.translate(0,MAP_TOP);
+    ctx.drawImage(terrainCanvas,0,0);
+    for(let i=0;i<owner.length;i++){
+      const o=owner[i];
+      if(o===-1) continue;
+      const x=(i%COLS)*CELL, y=((i/COLS)|0)*CELL;
+      let col=players[o].color;
+      if(terrain[i]===MOUNTAIN) col=mixHex(col,0.32);
+      ctx.fillStyle=col; ctx.fillRect(x,y,CELL,CELL);
+    }
+    // Structures and naval units are drawn on the overlay layer at a constant
+    // on-screen size (a single tile is only 0.625px wide, far too small for icons).
+
+    // Territory labels: size grows with owned territory. The crown marks the
+    // current #1 land holder and therefore changes dynamically during play.
+    const ranked=[...players].sort((a,b)=>b.tileCount-a.tileCount);
+    const leader=ranked[0];
+    if(!showPlayerNames) return ctx.restore();
+    for(const p of players){
+      if(p.tileCount<=0) continue;
+      let sx=0,sy=0,count=0;
+      for(let i=0;i<owner.length;i++) if(owner[i]===p.id){ sx+=(i%COLS)*CELL; sy+=((i/COLS)|0)*CELL; count++; }
+      if(!count) continue;
+      const cx=sx/count, cy=sy/count;
+      const size=Math.max(12,Math.min(54,10+Math.sqrt(p.tileCount)*1.15));
+      ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font=`700 ${size}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-head')||'Arial'}`;
+      ctx.lineWidth=Math.max(2,size*.16); const labelHover = hoveredCell>=0 && owner[hoveredCell]===p.id;
+      ctx.strokeStyle=labelHover?'rgba(0,0,0,.39)':'rgba(0,0,0,.78)'; ctx.fillStyle=labelHover?'rgba(255,255,255,.5)':'#fff';
+      const crown=p===leader?'♛ ':'';
+      const label=crown+p.name;
+      ctx.strokeText(label,cx,cy); ctx.fillText(label,cx,cy);
+      if(p.isHuman && p.country){
+        ctx.font=`600 ${Math.max(9,size*.34)}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-body')||'Arial'}`;
+        ctx.strokeText(p.country,cx,cy+size*.78); ctx.fillText(p.country,cx,cy+size*.78);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+    drawOverlay();
+  }
+
+  // ---------- overlay layer: icons, ships, hover highlight ----------
+  // Everything here is sized in CSS pixels and converted to world units, so
+  // markers and the cursor highlight stay readable at every zoom level.
+  function worldPerCssPx(){
+    const rect=mapCanvas.getBoundingClientRect();
+    return mapCanvas.width/Math.max(1,rect.width);
+  }
+  function cssToWorld(px){ return px*worldPerCssPx(); }
+  function cellX(i){ return (i%COLS)*CELL; }
+  function cellY(i){ return ((i/COLS)|0)*CELL; }
+
+  function canBuildHere(i){
+    if(i<0 || !buildMode) return false;
+    const you=players[HUMAN];
+    if(owner[i]!==HUMAN || structures[i]) return false;
+    if(buildMode==='city') return you.gold>=CITY_COST;
+    return you.gold>=PORT_COST && isCoastal(i);
+  }
+  function canLandHere(i){ return i>=0 && terrain[i]!==WATER && owner[i]!==HUMAN; }
+  function canAttackHere(i){ return i>=0 && terrain[i]!==WATER && players[HUMAN].attackTargets.has(i); }
+
+  // Tiles are sub-pixel, so pixel-perfect clicking is impossible. Snap the
+  // cursor to the nearest legal tile within a small on-screen radius.
+  function snapTo(cell, pred){
+    if(cell<0) return -1;
+    if(pred(cell)) return cell;
+    const radius=Math.round(clamp(cssToWorld(14)/CELL, 1, 40));
+    const x0=cell%COLS, y0=(cell/COLS)|0;
+    let best=-1, bestD=Infinity;
+    for(let dy=-radius;dy<=radius;dy++){
+      const y=y0+dy; if(y<0||y>=ROWS) continue;
+      for(let dx=-radius;dx<=radius;dx++){
+        const x=x0+dx; if(x<0||x>=COLS) continue;
+        const d=dx*dx+dy*dy;
+        if(d>=bestD || d>radius*radius) continue;
+        const i=idx(x,y);
+        if(pred(i)){ bestD=d; best=i; }
+      }
+    }
+    return best;
+  }
+
+  function activePredicate(){
+    if(buildMode) return canBuildHere;
+    if(shipMode) return canLandHere;
+    return canAttackHere;
+  }
+
+  function drawMarkerBox(cx,cy,size,color,dash){
+    const half=size/2;
+    octx.save();
+    octx.lineWidth=Math.max(0.5,cssToWorld(2));
+    octx.strokeStyle=color;
+    if(dash) octx.setLineDash([cssToWorld(3),cssToWorld(3)]);
+    octx.strokeRect(cx-half,cy-half,size,size);
+    octx.setLineDash([]);
+    const tick=size*0.28;
+    octx.beginPath();
+    octx.moveTo(cx-half-tick,cy); octx.lineTo(cx-half,cy);
+    octx.moveTo(cx+half,cy); octx.lineTo(cx+half+tick,cy);
+    octx.moveTo(cx,cy-half-tick); octx.lineTo(cx,cy-half);
+    octx.moveTo(cx,cy+half); octx.lineTo(cx,cy+half+tick);
+    octx.stroke();
+    octx.restore();
+  }
+
+  function drawOverlay(){
+    if(!terrain||!owner||!players) return;
+    octx.setTransform(1,0,0,1,0,0);
+    octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
+    octx.translate(0,MAP_TOP);
+    const lw=Math.max(0.45,cssToWorld(1.4));
+
+    // --- cities & ports ---
+    const r=Math.max(1.2,cssToWorld(6));
+    for(const i of structuresList){
+      const o=owner[i];
+      const cx=cellX(i)+CELL/2, cy=cellY(i)+CELL/2;
+      const type=structures[i];
+      octx.save();
+      octx.lineWidth=lw;
+      octx.strokeStyle='rgba(0,0,0,.9)';
+      if(type==='city'){
+        octx.fillStyle = o===HUMAN ? '#ffe08a' : '#f2f5f8';
+        octx.beginPath();
+        octx.moveTo(cx,cy-r*1.3);
+        octx.lineTo(cx+r,cy-r*.25);
+        octx.lineTo(cx+r*.6,cy-r*.25);
+        octx.lineTo(cx+r*.6,cy+r);
+        octx.lineTo(cx-r*.6,cy+r);
+        octx.lineTo(cx-r*.6,cy-r*.25);
+        octx.lineTo(cx-r,cy-r*.25);
+        octx.closePath();
+        octx.fill(); octx.stroke();
+      } else {
+        octx.fillStyle = o===HUMAN ? '#7fe3ff' : '#f2f5f8';
+        octx.beginPath(); octx.arc(cx,cy,r*.9,0,Math.PI*2); octx.fill(); octx.stroke();
+        octx.strokeStyle='#04202b'; octx.lineWidth=lw*1.3;
+        octx.beginPath();
+        octx.moveTo(cx,cy-r*.55); octx.lineTo(cx,cy+r*.55);
+        octx.moveTo(cx-r*.5,cy-r*.12); octx.lineTo(cx+r*.5,cy-r*.12);
+        octx.moveTo(cx-r*.45,cy+r*.3); octx.lineTo(cx,cy+r*.6); octx.lineTo(cx+r*.45,cy+r*.3);
+        octx.stroke();
+      }
+      octx.restore();
+    }
+
+    // --- warships & transports ---
+    const sr=Math.max(1.5,cssToWorld(9));
+    for(const ship of ships){
+      if(!ship.alive) continue;
+      const cx=ship.x*CELL, cy=ship.y*CELL;
+      if(ship.type==='transport'){
+        octx.save();
+        octx.setLineDash([cssToWorld(5),cssToWorld(4)]);
+        octx.strokeStyle='rgba(127,227,255,.8)'; octx.lineWidth=lw;
+        octx.beginPath(); octx.moveTo(cx,cy); octx.lineTo(ship.tx*CELL,ship.ty*CELL); octx.stroke();
+        octx.setLineDash([]);
+        octx.strokeStyle='rgba(255,214,120,.95)';
+        octx.beginPath(); octx.arc(ship.tx*CELL,ship.ty*CELL,sr*.85,0,Math.PI*2); octx.stroke();
+        octx.restore();
+      } else {
+        octx.save();
+        octx.strokeStyle='rgba(127,227,255,.3)'; octx.lineWidth=lw;
+        octx.setLineDash([cssToWorld(4),cssToWorld(5)]);
+        octx.beginPath(); octx.arc(cx,cy,WARSHIP_RANGE*CELL,0,Math.PI*2); octx.stroke();
+        octx.restore();
+      }
+      octx.save();
+      octx.translate(cx,cy);
+      octx.lineWidth=lw; octx.strokeStyle='rgba(0,0,0,.9)';
+      octx.fillStyle = ship.owner!==HUMAN ? '#ffb4aa' : (ship.type==='warship' ? '#dff8ff' : '#a8e86a');
+      octx.beginPath();
+      octx.moveTo(-sr,-sr*.1);
+      octx.lineTo(sr,-sr*.1);
+      octx.lineTo(sr*.55,sr*.5);
+      octx.lineTo(-sr*.7,sr*.5);
+      octx.closePath(); octx.fill(); octx.stroke();
+      octx.beginPath();
+      if(ship.type==='warship'){
+        octx.rect(-sr*.18,-sr*.95,sr*.36,sr*.85);
+        octx.fill(); octx.stroke();
+        octx.beginPath(); octx.rect(-sr*.62,-sr*.5,sr*.3,sr*.4);
+      } else {
+        octx.rect(-sr*.5,-sr*.8,sr*.95,sr*.7);
+      }
+      octx.fill(); octx.stroke();
+      octx.restore();
+    }
+
+    // --- cursor highlight ---
+    if(hoveredCell>=0){
+      const hx=cellX(hoveredCell)+CELL/2, hy=cellY(hoveredCell)+CELL/2;
+      const box=Math.max(CELL,cssToWorld(13));
+      octx.save();
+      octx.fillStyle='rgba(255,255,255,.22)';
+      octx.fillRect(hx-box/2,hy-box/2,box,box);
+      octx.restore();
+      let col='rgba(255,255,255,.95)';
+      if(buildMode) col=canBuildHere(hoveredCell)?'rgba(140,255,170,.95)':'rgba(255,255,255,.55)';
+      else if(shipMode) col=canLandHere(hoveredCell)?'rgba(127,227,255,.95)':'rgba(255,255,255,.55)';
+      drawMarkerBox(hx,hy,box,col,false);
+
+      if(snapCell>=0 && snapCell!==hoveredCell){
+        const sx=cellX(snapCell)+CELL/2, sy=cellY(snapCell)+CELL/2;
+        const sbox=Math.max(CELL,cssToWorld(15));
+        let scol='rgba(255,110,100,.98)';
+        if(buildMode) scol='rgba(140,255,170,.98)';
+        else if(shipMode) scol='rgba(127,227,255,.98)';
+        octx.save();
+        octx.strokeStyle=scol; octx.lineWidth=Math.max(0.4,cssToWorld(1.2));
+        octx.setLineDash([cssToWorld(3),cssToWorld(3)]);
+        octx.beginPath(); octx.moveTo(hx,hy); octx.lineTo(sx,sy); octx.stroke();
+        octx.restore();
+        drawMarkerBox(sx,sy,sbox,scol,true);
+      }
+    }
+  }
+
+  function updateHUD(){
+    const you=players[HUMAN];
+    const pct=(you.tileCount/totalLand*100);
+    document.getElementById('youPct').textContent=pct.toFixed(1)+'%';
+    document.getElementById('youBar').style.width=Math.min(100,pct)+'%';
+    document.getElementById('youTroops').textContent=Math.floor(you.troops).toLocaleString();
+    document.getElementById('youGold').textContent=Math.floor(you.gold).toLocaleString();
+    document.getElementById('totalLandLabel').textContent=totalLand.toLocaleString();
+    document.getElementById('cityCostLabel').textContent=CITY_COST;
+    document.getElementById('portCostLabel').textContent=PORT_COST;
+    document.getElementById('warshipCostLabel').textContent=WARSHIP_COST;
+    const hasPort=ownedCoastalPort(you)>=0;
+    document.getElementById('buildWarshipBtn').disabled = you.gold<WARSHIP_COST || !hasPort;
+    const shipBtn=document.getElementById('launchShipBtn');
+    shipBtn.disabled = !hasPort || you.gold<TRANSPORT_COST;
+    shipBtn.title = hasPort ? `Send a transport · ${TRANSPORT_COST}g` : 'Build a port first';
+    const wc=ships.filter(s=>s.owner===HUMAN && s.type==='warship').length;
+    const tc=ships.filter(s=>s.owner===HUMAN && s.type==='transport').length;
+    const pc=structuresList.filter(i=>owner[i]===HUMAN && structures[i]==='port').length;
+    const cc=structuresList.filter(i=>owner[i]===HUMAN && structures[i]==='city').length;
+    document.getElementById('navalStatus').textContent=`Cities: ${cc} · Ports: ${pc} · Warships: ${wc} · Transports: ${tc}`;
+    document.getElementById('buildCityBtn').disabled = you.gold<CITY_COST;
+    document.getElementById('buildPortBtn').disabled = you.gold<PORT_COST;
+
+    const atkEl=document.getElementById('offensives');
+    const keys=Object.keys(activeAttacks);
+    if(!keys.length){
+      atkEl.innerHTML='<span style="color:var(--text-dim);">No active offensives — click a lit border tile.</span>';
+    } else {
+      atkEl.innerHTML=keys.map(key=>{
+        const atk=activeAttacks[key];
+        const name=atk.targetOwner===-1?'Unclaimed territory':players[atk.targetOwner].name;
+        return `<div class="stat-row"><span>${name}</span><span class="v">${Math.floor(atk.troops).toLocaleString()}</span></div>`;
+      }).join('');
+    }
+
+    const lb=document.getElementById('leaderboard');
+    lb.innerHTML='';
+    const sorted=[...players].sort((a,b)=>b.tileCount-a.tileCount);
+    for(const p of sorted){
+      const row=document.createElement('div');
+      row.className='lb-row';
+      const dead = p.tileCount<=0;
+      row.innerHTML=`<span class="lb-swatch" style="background:${dead?'#3a4249':p.color}"></span>
+        <span class="lb-name ${p.isHuman?'you':''} ${dead?'dead':''}">${p===sorted[0]&&!dead?'♛ ':''}${p.name}</span>
+        <span class="lb-pct">${dead?'out':(p.tileCount/totalLand*100).toFixed(1)+'%'}</span>`;
+      lb.appendChild(row);
+    }
+  }
+
+  // ---------- input ----------
+  function screenToCell(evt){
+    const rect=mapCanvas.getBoundingClientRect();
+    const scaleX=mapCanvas.width/rect.width, scaleY=mapCanvas.height/rect.height;
+    const cx=(evt.clientX-rect.left)*scaleX;
+    const cy=(evt.clientY-rect.top)*scaleY-MAP_TOP;
+    if(cy<0 || cy>=MAP_WORLD_H) return null;
+    const x=Math.floor(cx/CELL), y=Math.floor(cy/CELL);
+    if(!inBounds(x,y)) return null;
+    return {x,y,i:idx(x,y)};
+  }
+
+  // ---------- map camera input ----------
+  mapCanvas.addEventListener('pointerdown', (evt)=>{
+    if(evt.button!==0) return;
+    dragging=true; dragMoved=false;
+    dragStartX=evt.clientX; dragStartY=evt.clientY;
+    panStartX=cameraX; panStartY=cameraY;
+    mapCanvas.setPointerCapture?.(evt.pointerId);
+    document.querySelector('.map-stage').classList.add('is-dragging');
+  });
+
+  mapCanvas.addEventListener('pointermove', (evt)=>{
+    if(!dragging) return;
+    const dx=evt.clientX-dragStartX, dy=evt.clientY-dragStartY;
+    if(Math.abs(dx)+Math.abs(dy)>5) dragMoved=true;
+    cameraX=panStartX+dx;
+    cameraY=panStartY+dy;
+    applyCamera();
+  });
+
+  function endDrag(evt){
+    if(!dragging) return;
+    dragging=false;
+    document.querySelector('.map-stage').classList.remove('is-dragging');
+    try{ mapCanvas.releasePointerCapture?.(evt.pointerId); }catch(_){}
+  }
+  mapCanvas.addEventListener('pointerup', endDrag);
+  mapCanvas.addEventListener('pointercancel', endDrag);
+  mapCanvas.addEventListener('wheel', (evt)=>{
+    evt.preventDefault();
+    changeZoom(evt.deltaY<0 ? 0.35 : -0.35);
+  }, {passive:false});
+
+  document.getElementById('zoomInBtn').addEventListener('click', ()=>changeZoom(0.5));
+  document.getElementById('zoomOutBtn').addEventListener('click', ()=>changeZoom(-0.5));
+  document.getElementById('zoomResetBtn').addEventListener('click', resetCamera);
+
+  document.getElementById('uiToggle').addEventListener('click', ()=>{
+    const layer=document.querySelector('.ui-layer');
+    const hidden=layer.classList.toggle('ui-hidden');
+    document.body.classList.toggle('ui-hidden-mode',hidden);
+    const btn=document.getElementById('uiToggle');
+    btn.textContent=hidden?'☰':'◉';
+    btn.title=hidden?'Show interface':'Hide interface';
+    btn.setAttribute('aria-label',btn.title);
+  });
+
+  function togglePlayerNames(){
+    showPlayerNames=!showPlayerNames;
+    const btn=document.getElementById('namesToggleBtn');
+    btn.textContent=showPlayerNames?'♙':'♙̸';
+    btn.title=showPlayerNames?'Hide player names':'Show player names';
+    btn.setAttribute('aria-label',btn.title);
+    render();
+  }
+  document.getElementById('namesToggleBtn').addEventListener('click', togglePlayerNames);
+
+  window.addEventListener('keydown',(e)=>{
+    if(e.target && ['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName)) return;
+    if(e.key==='+' || e.key==='='){ e.preventDefault(); changeZoom(0.5); }
+    if(e.key==='-' || e.key==='_'){ e.preventDefault(); changeZoom(-0.5); }
+    if(e.key==='0'){ e.preventDefault(); resetCamera(); }
+    if(e.key.toLowerCase()==='n'){ e.preventDefault(); togglePlayerNames(); }
+  });
+
+  mapCanvas.addEventListener('click', (evt)=>{
+    if(dragMoved){ dragMoved=false; return; }
+    if(gameOver||paused) return;
+    const c=screenToCell(evt);
+    if(!c) return;
+    const target=snapTo(c.i, activePredicate());
+    if(shipMode){
+      if(target>=0){
+        if(launchNavalInvasion(target)){
+          shipMode=false;
+          document.getElementById('launchShipBtn').classList.remove('naval-active');
+        }
+        render(); updateHUD();
+      }
+      return;
+    }
+    const you=players[HUMAN];
+
+    if(buildMode){
+      if(target<0) return;
+      if(buildMode==='city'){
+        structures[target]='city'; structuresList.push(target); you.gold-=CITY_COST;
+        log('You founded a city.', you);
+      } else {
+        structures[target]='port'; structuresList.push(target); you.gold-=PORT_COST;
+        log('You built a port.', you);
+      }
+      window.setBuildMode(null);
+      render(); updateHUD();
+      return;
+    }
+
+    if(target<0) return;
+    const targetOwner=owner[target];
+    const pct=parseInt(document.getElementById('pctSlider').value,10)/100;
+    const commit=Math.min(you.troops, you.troops*pct);
+    if(commit<1) return;
+    you.troops-=commit;
+    const key=String(targetOwner);
+    if(!activeAttacks[key]){
+      activeAttacks[key]={targetOwner, troops:0};
+      log(`You opened an offensive against ${targetOwner===-1?'unclaimed territory':players[targetOwner].name}.`, you);
+    }
+    activeAttacks[key].troops+=commit;
+    updateHUD();
+  });
+
+  window.setBuildMode=function(mode){
+    if(mode==='warship'){ buildWarship(); updateHUD(); drawOverlay(); return; }
+    shipMode=false; document.getElementById('launchShipBtn').classList.remove('naval-active');
+    buildMode = (buildMode===mode) ? null : mode;
+    document.getElementById('buildCityBtn').classList.toggle('active', buildMode==='city');
+    document.getElementById('buildPortBtn').classList.toggle('active', buildMode==='port');
+    document.getElementById('buildWarshipBtn').classList.toggle('active', buildMode==='warship');
+    snapCell = hoveredCell>=0 ? snapTo(hoveredCell, activePredicate()) : -1;
+    drawOverlay();
+  };
+
+  mapCanvas.addEventListener('mousemove', (evt)=>{
+    if(!terrain) return;
+    const c=screenToCell(evt);
+    hoveredCell=c?c.i:-1;
+    snapCell = c ? snapTo(c.i, activePredicate()) : -1;
+    const info=document.getElementById('tileInfo');
+    if(!c){
+      info.textContent='Hover the map to inspect terrain';
+      drawOverlay();
+      return;
+    }
+    const t=terrain[c.i];
+    const o=owner[c.i];
+    const terrainName = t===WATER?'Ocean':(t===MOUNTAIN?'Mountain':'Plains');
+    const ownerName = o===-1?'Unclaimed':players[o].name;
+    const structTag = structures[c.i] ? ` · ${structures[c.i]}` : '';
+    let hint='';
+    if(buildMode){
+      hint = snapCell>=0 ? ` · <b>CLICK TO BUILD ${buildMode.toUpperCase()}</b>`
+        : (buildMode==='port' ? ' · <b>need an empty coastal tile you own</b>' : ' · <b>need an empty tile you own</b>');
+    } else if(shipMode){
+      hint = snapCell>=0 ? ' · <b>CLICK TO LAND HERE</b>' : ' · <b>pick a shore you do not own</b>';
+    } else if(snapCell>=0){
+      const tn = owner[snapCell]===-1?'unclaimed land':players[owner[snapCell]].name;
+      hint = ` · <b>CLICK TO ATTACK ${tn.toUpperCase()}</b>`;
+    }
+    info.innerHTML=`${terrainName} — <b>${ownerName}</b>${structTag}${hint}`;
+    drawOverlay();
+  });
+
+  function clearHover(){
+    hoveredCell=-1; snapCell=-1;
+    document.getElementById('tileInfo').textContent='Hover the map to inspect terrain';
+    drawOverlay();
+  }
+  mapCanvas.addEventListener('mouseleave', clearHover);
+  document.querySelector('.map-frame').addEventListener('mouseleave', clearHover);
+
+  document.getElementById('pctSlider').addEventListener('input', (e)=>{
+    document.getElementById('pctLabel').textContent=e.target.value+'%';
+  });
+
+  window.togglePause=function(){
+    if(gameOver) return;
+    paused=!paused;
+    document.getElementById('pauseBtn').textContent = paused?'Resume':'Pause';
+  };
+
+  window.addEventListener('keydown',(e)=>{
+    if(e.code==='Space' && document.activeElement.tagName!=='INPUT'){ e.preventDefault(); togglePause(); }
+    if(e.code==='Escape' && buildMode){ setBuildMode(buildMode); }
+  });
+
+  function initCountrySelect(){
+    const select=document.getElementById('countrySelect');
+    select.innerHTML=COUNTRY_DATA.map(c=>`<option value="${c[0]}">${c[0]}</option>`).join('');
+    select.value=selectedCountry;
+  }
+
+  function startCampaign(){
+    const input=document.getElementById('playerNameInput');
+    selectedPlayerName=(input.value.trim()||'Player').slice(0,20);
+    selectedCountry=document.getElementById('countrySelect').value;
+    document.getElementById('countryModal').style.display='none';
+    boot();
+  }
+
+  document.getElementById('startCampaignBtn').addEventListener('click',startCampaign);
+  document.getElementById('playerNameInput').addEventListener('keydown',e=>{if(e.key==='Enter')startCampaign();});
+  initCountrySelect();
+
+  window.restart=function(){
+    clearInterval(tickTimer);
+    paused=false; gameOver=false; buildMode=null; shipMode=false; ships=[];
+    hoveredCell=-1; snapCell=-1; activeAttacks={};
+    document.getElementById('endScreen').classList.remove('show');
+    document.getElementById('log').innerHTML='';
+    document.getElementById('pauseBtn').textContent='Pause';
+    document.getElementById('buildCityBtn').classList.remove('active');
+    document.getElementById('buildPortBtn').classList.remove('active');
+    document.getElementById('buildWarshipBtn').classList.remove('active');
+    document.getElementById('launchShipBtn').classList.remove('naval-active');
+    document.getElementById('playerNameInput').value=selectedPlayerName;
+    document.getElementById('countrySelect').value=selectedCountry;
+    document.getElementById('countryModal').style.display='grid';
+  };
+
+  function boot(){
+    genMap();
+    setupPlayers();
+    computeFrontiers();
+    render();
+    updateHUD();
+    applyCamera();
+    tickTimer=setInterval(tick, TICK_MS);
+  }
+
+})();
+</script>
+</body>
+</html>
